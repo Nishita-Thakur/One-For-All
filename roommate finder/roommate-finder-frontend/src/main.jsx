@@ -214,6 +214,18 @@ console.log("CREATE PROFILE CLICKED");
     return;
   }
 
+  const { error: detailsError } = await supabase
+  .from("student_details")
+  .insert({
+    user_id: user.id,
+    academic_score: Number(profile.score)
+  });
+
+if(detailsError){
+  console.log("Student details error:", detailsError);
+  return;
+}
+
 
   setScreen("dashboard");
 
