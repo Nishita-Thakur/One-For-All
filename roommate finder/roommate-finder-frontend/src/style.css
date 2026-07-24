@@ -2343,3 +2343,461 @@ button:hover {
         background: var(--sidebar);
     }
 }
+
+.request-tabs{
+display:flex;
+gap:12px;
+margin-bottom:25px;
+background:var(--surface);
+padding:8px;
+border-radius:16px;
+width:max-content;
+border:1px solid var(--border);
+}
+
+
+.request-tabs button{
+background:transparent;
+color:var(--text-secondary);
+padding:10px 18px;
+}
+
+
+.request-tabs button.active{
+background:var(--active-bg);
+color:var(--active-text);
+}
+
+
+
+.requests-container{
+display:grid;
+gap:18px;
+max-width:750px;
+}
+
+
+
+.request-card{
+
+background:var(--surface);
+border:1px solid var(--border);
+border-radius:22px;
+padding:22px;
+
+box-shadow:var(--shadow);
+
+}
+
+
+
+.request-top{
+
+display:flex;
+align-items:center;
+gap:16px;
+
+}
+
+
+
+.request-top h3{
+font-size:1.1rem;
+margin-bottom:5px;
+}
+
+
+
+.compat{
+
+display:inline-block;
+margin-top:8px;
+
+background:var(--active-bg);
+color:var(--active-text);
+
+padding:5px 12px;
+
+border-radius:20px;
+
+font-size:.75rem;
+
+}
+
+
+
+.request-tags{
+
+display:flex;
+gap:8px;
+margin:18px 0;
+}
+
+
+
+.request-tags span{
+
+background:var(--chip-bg);
+color:var(--chip-text);
+
+padding:6px 12px;
+
+border-radius:20px;
+
+font-size:.75rem;
+
+}
+
+
+
+.request-bio{
+
+font-size:.85rem;
+margin-bottom:18px;
+
+}
+
+
+
+.request-actions{
+
+display:flex;
+gap:12px;
+
+}
+
+
+
+.request-actions button{
+
+flex:1;
+
+}
+
+
+
+.withdraw{
+
+margin-top:18px;
+
+background:transparent;
+
+border:1px solid var(--border);
+
+color:var(--text);
+
+width:100%;
+
+}
+
+/* =========================
+   Premium Requests UI
+========================= */
+
+
+.requests-page{
+    max-width:900px;
+}
+
+
+.requests-header{
+    margin-bottom:35px;
+}
+
+
+.requests-header h1{
+    font-size:3rem;
+    margin:12px 0;
+}
+
+
+.request-tabs{
+
+    display:flex;
+    gap:10px;
+
+    background:var(--surface);
+    padding:8px;
+
+    width:max-content;
+
+    border-radius:18px;
+
+    border:1px solid var(--border);
+
+    margin-bottom:30px;
+
+}
+
+
+.request-tabs button{
+
+    display:flex;
+    align-items:center;
+    gap:8px;
+
+    background:transparent;
+
+    color:var(--text-secondary);
+
+    padding:12px 22px;
+
+    border-radius:14px;
+
+}
+
+
+.request-tabs button span{
+
+    background:rgba(79,140,255,.15);
+
+    padding:3px 8px;
+
+    border-radius:20px;
+
+    font-size:.75rem;
+
+}
+
+
+.request-tabs button.active{
+
+    background:linear-gradient(
+        135deg,
+        var(--primary),
+        var(--secondary)
+    );
+
+    color:white;
+
+}
+
+
+
+.requests-grid{
+
+    display:grid;
+
+    gap:20px;
+
+}
+
+
+
+.request-card-new{
+
+    position:relative;
+
+    background:var(--surface);
+
+    border:1px solid var(--border);
+
+    border-radius:24px;
+
+    padding:26px;
+
+    box-shadow:var(--shadow);
+
+    transition:.25s;
+
+}
+
+
+.request-card-new:hover{
+
+    transform:translateY(-4px);
+
+    box-shadow:
+    0 20px 45px rgba(79,140,255,.15);
+
+}
+
+
+
+.request-user{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:16px;
+
+}
+
+
+
+.request-user h2{
+
+    font-size:1.25rem;
+
+    letter-spacing:-.03em;
+
+}
+
+
+.request-user p{
+
+    font-size:.85rem;
+
+}
+
+
+
+.match-pill,
+.pending-pill{
+
+    position:absolute;
+
+    top:25px;
+
+    right:25px;
+
+    padding:7px 14px;
+
+    border-radius:999px;
+
+    font-size:.75rem;
+
+    font-weight:700;
+
+}
+
+
+
+.match-pill{
+
+    background:#dcfce7;
+
+    color:#15803d;
+
+}
+
+
+
+.pending-pill{
+
+    background:var(--accent-soft);
+
+    color:var(--accent);
+
+}
+
+
+
+.request-tags{
+
+    display:flex;
+
+    flex-wrap:wrap;
+
+    gap:8px;
+
+    margin:22px 0;
+
+}
+
+
+
+.request-tags span{
+
+    background:var(--chip-bg);
+
+    color:var(--chip-text);
+
+    padding:7px 13px;
+
+    border-radius:999px;
+
+    font-size:.75rem;
+
+}
+
+
+
+.request-description{
+
+    font-size:.9rem;
+
+    line-height:1.6;
+
+    margin-bottom:22px;
+
+}
+
+
+
+.request-actions-new{
+
+    display:flex;
+
+    gap:12px;
+
+}
+
+
+
+.request-actions-new button{
+
+    flex:1;
+
+    padding:13px;
+
+}
+
+
+
+.reject{
+
+    background:var(--surface)!important;
+
+    color:var(--text)!important;
+
+    border:1px solid var(--border)!important;
+
+}
+
+
+
+.approve{
+
+    background:var(--primary)!important;
+
+    color:white!important;
+
+}
+
+
+
+.withdraw-new{
+
+    margin-top:22px;
+
+    width:100%;
+
+    background:transparent!important;
+
+    color:#ef4444!important;
+
+    border:1px solid #ef4444!important;
+
+}
+
+
+
+@media(max-width:700px){
+
+.request-tabs{
+
+    width:100%;
+
+}
+
+.request-tabs button{
+
+    flex:1;
+
+    padding:10px;
+
+}
+
+}

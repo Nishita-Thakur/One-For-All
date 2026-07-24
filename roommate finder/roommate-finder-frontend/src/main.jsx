@@ -1,6 +1,9 @@
+import { supabase } from "./lib/supabase";
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
+
+
 
 const BRANCHES = ['Computer Science & Engineering', 'Computer Engineering', 'Electronics & Communication', 'Electrical Engineering', 'Mechanical Engineering', 'Civil Engineering', 'Chemical Engineering', 'Biotechnology', 'Mathematics & Computing', 'Business Administration', 'Architecture'];
 const HOSTELS = { Male: ['Hostel H', 'Hostel J', 'Hostel K', 'Hostel M'], Female: ['Hostel E', 'Hostel G', 'Hostel I', 'Hostel PG1', 'Hostel PG2', 'Hostel Q'] };
@@ -15,7 +18,7 @@ const getInitialTheme = () => {
 const initialTheme = getInitialTheme();
 document.documentElement.dataset.theme = initialTheme;
 const student = (name, gender, year, branch, hostel, avatar, color, preferences) => ({ name, gender, year, branch, hostel, avatar, color, bio: 'Looking for a kind, respectful person to share a calm and friendly room with.', preferences });
-const students = [
+const demoStudents = [
   student('Aarav Sharma', 'Male', '2nd year', 'Computer Engineering', 'Hostel H', 'AS', '#2563EB', { ...defaultPreferences, sleep: 'Early bird', wake: '6:30 AM', clean: 'Very tidy', interests: ['Football', 'Music', 'Reading'] }),
   student('Kabir Mehta', 'Male', '2nd year', 'Computer Science & Engineering', 'Hostel J', 'KM', '#3B82F6', { ...defaultPreferences, sleep: 'Night owl', wake: '8:30 AM', study: 'Quiet focus', interests: ['Gym', 'Movies', 'Music'] }),
   student('Vihaan Gupta', 'Male', '1st year', 'Electronics & Communication', 'Hostel H', 'VG', '#1E293B', { ...defaultPreferences, sleep: 'Flexible', noise: 'High', interests: ['Gaming', 'Music', 'Movies'] }),
@@ -48,8 +51,63 @@ function App() {
   const [filter, setFilter] = useState('All');
   const [query, setQuery] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
-  const [requests, setRequests] = useState(['Aarav Sharma']);
-  const [connections, setConnections] = useState(['Kabir Mehta']);
+  const [requests, setRequests] = useState([
+  {
+    name: "Aarav Sharma",
+    status: "incoming",
+    date: "Today"
+  }
+]);
+async function fetchMatches(){
+
+  const { data, error } = await supabase
+    .rpc("get_roommate_matches");
+
+
+  if(error){
+    console.log("Match error:", error);
+    return;
+  }
+
+
+  console.log("Matches from DB:", data);
+
+  setStudents(data);
+
+}
+
+async function testProfiles(){
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*");
+
+  if(error){
+    console.log("Database error:", error);
+    return;
+  }
+
+  console.log("Profiles:", data);
+
+}
+
+useEffect(()=>{
+
+  testProfiles();
+
+  fetchMatches();
+
+},[]);
+
+const [sentRequests, setSentRequests] = useState([]);
+const [students, setStudents] = useState([]);
+const [connections, setConnections] = useState([
+  {
+    name: "Kabir Mehta",
+    status: "accepted",
+    date: "2 days ago"
+  }
+]);
   const [requestPanel, setRequestPanel] = useState(false);
   const [personModal, setPersonModal] = useState(null);
   const [toast, setToast] = useState('');
@@ -60,24 +118,102 @@ function App() {
   }, [theme]);
   const tell = message => { setToast(message); setTimeout(() => setToast(''), 2400); };
   const initials = profile.name.split(' ').map(word => word[0]).join('').slice(0, 2);
-  const matches = useMemo(() => students.filter(person => person.gender === profile.gender).map(person => ({ ...person, compatibility: getScore(profile, person) })).sort((a, b) => b.compatibility - a.compatibility), [profile]);
+  const matches = useMemo(() => {
+
+return students
+.filter(person => person.gender === profile.gender)
+.sort(
+(a,b)=>b.match_percentage-a.match_percentage
+)
+.map(person => ({
+  ...person,
+  compatibility: person.match_percentage,
+  preferences:{
+    interests:[]
+  }
+}));
+
+},[students,profile.gender]);
   const shown = matches.filter(person => (filter === 'All' || person.hostel === filter) && person.name.toLowerCase().includes(query.toLowerCase()));
-  const accept = name => { setRequests(old => old.filter(item => item !== name)); setConnections(old => old.includes(name) ? old : [...old, name]); setRequestPanel(false); tell(`${name} is now in your chats`); };
+  const accept = name => {
+
+  setRequests(old =>
+    old.filter(item => item.name !== name)
+  );
+
+  setConnections(old =>
+    old.some(item => item.name === name)
+      ? old
+      : [
+          ...old,
+          {
+            name,
+            status: "accepted",
+            date: "Today"
+          }
+        ]
+  );
+
+  setRequestPanel(false);
+
+  tell(`${name} is now in your chats`);
+};
+  const sendRequest = person => {
+
+  if (connections.some(item => item.name === person.name)) {
+    return tell(`You are already connected with ${person.name}`);
+  }
+
+  if (sentRequests.some(item => item.name === person.name)) {
+    return tell(`Your request to ${person.name} is already pending`);
+  }
+
+  setSentRequests(old => [
+    ...old,
+    {
+      name: person.name,
+      status: "pending",
+      date: "Today"
+    }
+  ]);
+
+  tell(`Connection request sent to ${person.name}`);
+};
+  const withdrawRequest = name => {
+
+  setSentRequests(old =>
+    old.filter(item => item.name !== name)
+  );
+
+  tell(`Request to ${name} withdrawn`);
+
+};
 
   if (screen === 'welcome') return <><TopBar /><Landing open={mode => { setAuthMode(mode); setScreen('auth'); }} /></>;
   if (screen === 'auth') return <><TopBar /><Auth mode={authMode} setMode={setAuthMode} back={() => setScreen('welcome')} continueTo={() => setScreen(authMode === 'signup' ? 'onboard' : 'dashboard')} /></>;
   if (screen === 'onboard') return <><TopBar /><Onboarding profile={profile} setProfile={setProfile} step={onboardStep} setStep={setOnboardStep} done={() => { setScreen('dashboard'); tell('Profile created — welcome to Roommate Finder!'); }} /></>;
 
   return <><TopBar /><main className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-    <Sidebar screen={screen} setScreen={setScreen} profile={profile} initials={initials} open={accountOpen} setOpen={setAccountOpen} collapsed={sidebarCollapsed} toggleCollapsed={() => setSidebarCollapsed(value => !value)} signOut={() => { setScreen('welcome'); setAccountOpen(false); }} />
+    <Sidebar screen={screen} setScreen={setScreen} profile={profile} initials={initials} open={accountOpen} setOpen={setAccountOpen} collapsed={sidebarCollapsed} toggleCollapsed={() => setSidebarCollapsed(value => !value)} sentRequestCount={sentRequests.length} signOut={() => { setScreen('welcome'); setAccountOpen(false); }} />
     <section className="app-content">
-      {screen === 'dashboard' && <Dashboard profile={profile} matches={matches} requests={requests} openRequests={() => setRequestPanel(true)} openPerson={setPersonModal} setScreen={setScreen} />}
-      {screen === 'find' && <Finder profile={profile} shown={shown} filter={filter} setFilter={setFilter} query={query} setQuery={setQuery} openPerson={setPersonModal} />}
+      {screen === 'dashboard' && <Dashboard profile={profile} matches={matches} requests={requests} openRequests={() => setRequestPanel(true)} openPerson={setPersonModal} sendRequest={sendRequest} sentRequests={sentRequests} setScreen={setScreen} />}
+      {screen === 'find' && <Finder profile={profile} shown={shown} filter={filter} setFilter={setFilter} query={query} setQuery={setQuery} openPerson={setPersonModal} sendRequest={sendRequest} sentRequests={sentRequests} />}
+      {screen === 'requests' && 
+<Requests 
+requests={requests}
+sentRequests={sentRequests}
+connections={connections}
+people={students}
+withdrawRequest={withdrawRequest}
+accept={accept}
+setScreen={setScreen}
+/>
+}
       {screen === 'chat' && <Chat connections={connections} people={students} profile={profile} />}
       {screen === 'settings' && <Settings profile={profile} setProfile={setProfile} tell={tell} theme={theme} setTheme={setTheme} />}
     </section>
     {requestPanel && <RequestPanel requests={requests} people={students} close={() => setRequestPanel(false)} accept={accept} />}
-    {personModal && <ProfileModal person={personModal} profile={profile} close={() => setPersonModal(null)} connect={() => tell(`Request sent to ${personModal.name}`)} />}
+    {personModal && <ProfileModal person={personModal} profile={profile} close={() => setPersonModal(null)} connect={() => sendRequest(personModal)} requestSent={sentRequests.some(item => item.name === personModal.name)} />}
     {toast && <div className="toast">✓ {toast}</div>}
   </main></>;
 }
@@ -137,19 +273,266 @@ function Onboarding({ profile, setProfile, step, setStep, done }) {
   </main>;
 }
 
-function Sidebar({ screen, setScreen, profile, initials, open, setOpen, collapsed, toggleCollapsed, signOut }) { return <aside><div className="side-heading"><div className="side-brand">Roommate Finder</div><button className="collapse-toggle" onClick={toggleCollapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>{collapsed ? '›' : '‹'}</button></div><div className="side-nav"><button title="Discover" className={screen === 'dashboard' ? 'active' : ''} onClick={() => setScreen('dashboard')}><b>⌂</b><span>Discover</span></button><button title="Find roommates" className={screen === 'find' ? 'active' : ''} onClick={() => setScreen('find')}><b>⌕</b><span>Find roommates</span></button><button title="Chats" className={screen === 'chat' ? 'active' : ''} onClick={() => setScreen('chat')}><b className="chat-icon" aria-hidden="true" /><span>Chats</span></button><button title="Settings" className={screen === 'settings' ? 'active' : ''} onClick={() => setScreen('settings')}><b>⚙</b><span>Settings</span></button></div><div className="account-wrap"><button className="account" title="Open account menu" onClick={() => setOpen(!open)}><div className="avatar">{initials}</div><div><b>{profile.name}</b><small>{profile.hostel}</small></div><span>{open ? '⌃' : '⌄'}</span></button>{open && <div className="account-menu"><button onClick={() => { setScreen('settings'); setOpen(false); }}>⚙ Account settings</button><button className="signout" onClick={signOut}>↪ Sign out</button></div>}</div></aside>; }
+function Sidebar({ screen, setScreen, profile, initials, open, setOpen, collapsed, toggleCollapsed, sentRequestCount, signOut }) { return <aside><div className="side-heading"><div className="side-brand">Roommate Finder</div><button className="collapse-toggle" onClick={toggleCollapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>{collapsed ? '›' : '‹'}</button></div><div className="side-nav"><button title="Discover" className={screen === 'dashboard' ? 'active' : ''} onClick={() => setScreen('dashboard')}><b>⌂</b><span>Discover</span></button><button title="Find roommates" className={screen === 'find' ? 'active' : ''} onClick={() => setScreen('find')}><b>⌕</b><span>Find roommates</span></button><button title="Requests" className={screen === 'requests' ? 'active' : ''} onClick={() => setScreen('requests')}><b>↗</b><span>Requests</span>{sentRequestCount > 0 && <i className="request-count">{sentRequestCount}</i>}</button><button title="Chats" className={screen === 'chat' ? 'active' : ''} onClick={() => setScreen('chat')}><b className="chat-icon" aria-hidden="true" /><span>Chats</span></button><button title="Settings" className={screen === 'settings' ? 'active' : ''} onClick={() => setScreen('settings')}><b>⚙</b><span>Settings</span></button></div><div className="account-wrap"><button className="account" title="Open account menu" onClick={() => setOpen(!open)}><div className="avatar">{initials}</div><div><b>{profile.name}</b><small>{profile.hostel}</small></div><span>{open ? '⌃' : '⌄'}</span></button>{open && <div className="account-menu"><button onClick={() => { setScreen('settings'); setOpen(false); }}>⚙ Account settings</button><button className="signout" onClick={signOut}>↪ Sign out</button></div>}</div></aside>; }
 
-function Dashboard({ profile, matches, requests, openRequests, openPerson, setScreen }) { const top = matches[0]; return <><header className="app-head"><div><p className="eyebrow">GOOD AFTERNOON, {profile.name.split(' ')[0].toUpperCase()}</p><h1>People you’ll get along with.</h1><p>Your compatibility updates every time you update your preferences.</p></div><button className="bell" onClick={openRequests}>♢{requests.length > 0 && <i />}</button></header><section className="feature-match"><div><p className="eyebrow">TOP MATCH FOR YOU</p><h2>{top.name} <span>{top.compatibility}% compatible</span></h2><p>Shared routines, room habits, and interests make this an especially strong fit.</p><div className="chips">{top.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><button onClick={() => openPerson(top)}>View full profile →</button></div><div className="feature-art"><div className="avatar huge" style={{ background: top.color }}>{top.avatar}</div><div className="quote">“{top.bio}”</div></div></section><section className="section-head"><div><h2>Great fits</h2><p>Matches from your current preferences.</p></div><button className="text-button" onClick={() => setScreen('find')}>See all →</button></section><div className="card-grid">{matches.slice(1, 4).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} />)}</div></>; }
+function Dashboard({ profile, matches, requests, openRequests, openPerson, sendRequest, sentRequests, setScreen }) {
 
-function Finder({ profile, shown, filter, setFilter, query, setQuery, openPerson }) { return <><header className="app-head compact"><div><p className="eyebrow">EXPLORE YOUR COMMUNITY</p><h1>Find your people.</h1></div></header><div className="searchbar"><span>⌕</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by name, branch, interest..." /></div><div className="filter-row"><b>Showing {shown.length} {profile.gender === 'Female' ? 'women' : 'men'}</b>{['All', ...HOSTELS[profile.gender]].map(hostel => <button key={hostel} className={filter === hostel ? 'selected' : ''} onClick={() => setFilter(hostel)}>{hostel}</button>)}</div><section className="near-title"><div><h2>Best fits</h2><p>Highly compatible with your lifestyle.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility >= 82).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} />)}</div><section className="near-title"><div><h2>Worth a look</h2><p>Different in a few ways, still potentially a good room fit.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility < 82).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} />)}</div></>; }
+const top = matches[0];
 
-function PersonCard({ person, openPerson }) { return <article className="person-card"><div className="person-top"><div className="avatar" style={{ background: person.color }}>{person.avatar}</div><span className="score">{person.compatibility}%</span></div><h3>{person.name}</h3><p>{person.year} · {shortBranch(person.branch)}</p><p className="hostel">⌂ {person.hostel}</p><div className="chips">{person.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><div className="card-actions"><button className="view" onClick={() => openPerson(person)}>View profile</button><button className="connect">Connect +</button></div></article>; }
+if(!top){
+  return (
+    <>
+      <header className="app-head">
+        <div>
+          <p className="eyebrow">
+            GOOD AFTERNOON, {profile.name.split(' ')[0].toUpperCase()}
+          </p>
+          <h1>People you’ll get along with.</h1>
+          <p>
+            Your roommate matches will appear here once profiles are available.
+          </p>
+        </div>
+      </header>
 
-function ProfileModal({ person, profile, close, connect }) { const prefs = person.preferences; return <div className="inbox-overlay profile-overlay"><section className="profile-modal"><header><div><p className="eyebrow">ROOMMATE PROFILE</p><h2>{person.name}</h2></div><button className="close" onClick={close}>×</button></header><div className="modal-person"><div className="avatar huge" style={{ background: person.color }}>{person.avatar}</div><div><p>{person.year} · {person.branch}</p><p>⌂ {person.hostel}</p><span className="score">{person.compatibility}% compatible with you</span></div></div><p className="bio">{person.bio}</p><h3>Room & lifestyle preferences</h3><div className="pref-grid"><Preference label="Room type" value={prefs.roomType} /><Preference label="Food" value={prefs.food} /><Preference label="Sleep style" value={prefs.sleep} /><Preference label="Wake-up time" value={prefs.wake} /><Preference label="Cleanliness" value={prefs.clean} /><Preference label="Study vibe" value={prefs.study} /><Preference label="Noise tolerance" value={prefs.noise} /><Preference label="Roommate year" value={prefs.roommateYear} /></div><h3>Interests</h3><div className="chips">{prefs.interests.map(item => <em key={item}>{item}</em>)}</div><button className="full modal-connect" onClick={() => { connect(); close(); }}>Send connection request</button></section></div>; }
+      <section className="feature-match">
+        <h2>No matches found yet 🚀</h2>
+        <p>
+          Complete profiles from other students will appear here.
+        </p>
+      </section>
+    </>
+  );
+} return <><header className="app-head"><div><p className="eyebrow">GOOD AFTERNOON, {profile.name.split(' ')[0].toUpperCase()}</p><h1>People you’ll get along with.</h1><p>Your compatibility updates every time you update your preferences.</p></div><button className="bell" onClick={openRequests}>♢{requests.length > 0 && <i />}</button></header><section className="feature-match"><div><p className="eyebrow">TOP MATCH FOR YOU</p><h2>{top.name} <span>{top.compatibility}% compatible</span></h2><p>Shared routines, room habits, and interests make this an especially strong fit.</p><div className="chips">{top.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><button onClick={() => openPerson(top)}>View full profile →</button></div><div className="feature-art"><div className="avatar huge" style={{ background: top.color }}>{top.avatar}</div><div className="quote">“{top.bio}”</div></div></section><section className="section-head"><div><h2>Great fits</h2><p>Matches from your current preferences.</p></div><button className="text-button" onClick={() => setScreen('find')}>See all →</button></section><div className="card-grid">{matches.slice(1, 4).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div></>; }
 
-function RequestPanel({ requests, people, close, accept }) { return <div className="inbox-overlay"><section className="inbox"><header><div><p className="eyebrow">CONNECTION REQUESTS</p><h2>Notifications</h2></div><button className="close" onClick={close}>×</button></header>{requests.length ? requests.map(name => { const person = people.find(item => item.name === name); return <article className="request" key={name}><div className="avatar" style={{ background: person.color }}>{person.avatar}</div><div><h3>{person.name}</h3><p>{person.compatibility || 'A strong'} compatibility match.</p><small>Sent you a connection request</small></div><div><button className="accept" onClick={() => accept(name)}>Accept</button><button className="decline" onClick={close}>Ignore</button></div></article>; }) : <div className="empty"><div>✦</div><h3>All caught up</h3><p>New requests will appear here.</p></div>}</section></div>; }
+function Finder({ profile, shown, filter, setFilter, query, setQuery, openPerson, sendRequest, sentRequests }) { return <><header className="app-head compact"><div><p className="eyebrow">EXPLORE YOUR COMMUNITY</p><h1>Find your people.</h1></div></header><div className="searchbar"><span>⌕</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by name, branch, interest..." /></div><div className="filter-row"><b>Showing {shown.length} {profile.gender === 'Female' ? 'women' : 'men'}</b>{['All', ...HOSTELS[profile.gender]].map(hostel => <button key={hostel} className={filter === hostel ? 'selected' : ''} onClick={() => setFilter(hostel)}>{hostel}</button>)}</div><section className="near-title"><div><h2>Best fits</h2><p>Highly compatible with your lifestyle.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility >= 82).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div><section className="near-title"><div><h2>Worth a look</h2><p>Different in a few ways, still potentially a good room fit.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility < 82).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div></>; }
 
-function Chat({ connections, people, profile }) { const connectedPeople = people.filter(person => connections.includes(person.name)); const [selected, setSelected] = useState(connectedPeople[0] || people[0]); const [message, setMessage] = useState(''); return <><header className="app-head compact"><div><p className="eyebrow">YOUR CONNECTIONS</p><h1>Chats</h1><p>Only accepted connections can message each other.</p></div></header><div className="chat-workspace"><div className="chat-list"><b>Messages</b>{connectedPeople.length ? connectedPeople.map(person => <button className={selected.name === person.name ? 'chosen' : ''} key={person.name} onClick={() => setSelected(person)}><div className="avatar" style={{ background: person.color }}>{person.avatar}</div><span><strong>{person.name}</strong><small>Connected roommate match</small></span></button>) : <p>No chats yet.</p>}</div><div className="chat-main"><header><div className="avatar" style={{ background: selected.color }}>{selected.avatar}</div><div><b>{selected.name}</b><small>Connected roommate match</small></div></header><div className="conversation"><div className="date">Today</div><p className="bubble them">Hey {profile.name.split(' ')[0]}! Glad we connected. Want to compare room preferences?</p><p className="bubble me">Absolutely — I’m usually free after 7.</p></div><form className="message" onSubmit={event => { event.preventDefault(); setMessage(''); }}><input value={message} onChange={event => setMessage(event.target.value)} placeholder="Write a message..." /><button>↑</button></form></div></div></>; }
+function PersonCard({ person, openPerson, sendRequest, requestSent }) { return <article className="person-card"><div className="person-top"><div className="avatar" style={{ background: person.color }}>{person.avatar}</div><span className="score">{person.compatibility}%</span></div><h3>{person.name}</h3><p>{person.year} · {shortBranch(person.branch)}</p><p className="hostel">⌂ {person.hostel}</p><div className="chips">{person.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><div className="card-actions"><button className="view" onClick={() => openPerson(person)}>View profile</button><button className={`connect ${requestSent ? 'sent' : ''}`} onClick={() => sendRequest(person)} disabled={requestSent}>{requestSent ? 'Request sent' : 'Connect +'}</button></div></article>; }
+
+function ProfileModal({ person, profile, close, connect, requestSent }) { const prefs = person.preferences; return <div className="inbox-overlay profile-overlay"><section className="profile-modal"><header><div><p className="eyebrow">ROOMMATE PROFILE</p><h2>{person.name}</h2></div><button className="close" onClick={close}>×</button></header><div className="modal-person"><div className="avatar huge" style={{ background: person.color }}>{person.avatar}</div><div><p>{person.year} · {person.branch}</p><p>⌂ {person.hostel}</p><span className="score">{person.compatibility}% compatible with you</span></div></div><p className="bio">{person.bio}</p><h3>Room & lifestyle preferences</h3><div className="pref-grid"><Preference label="Room type" value={prefs.roomType} /><Preference label="Food" value={prefs.food} /><Preference label="Sleep style" value={prefs.sleep} /><Preference label="Wake-up time" value={prefs.wake} /><Preference label="Cleanliness" value={prefs.clean} /><Preference label="Study vibe" value={prefs.study} /><Preference label="Noise tolerance" value={prefs.noise} /><Preference label="Roommate year" value={prefs.roommateYear} /></div><h3>Interests</h3><div className="chips">{prefs.interests.map(item => <em key={item}>{item}</em>)}</div><button className={`full modal-connect ${requestSent ? 'sent' : ''}`} onClick={() => { if (!requestSent) connect(); close(); }} disabled={requestSent}>{requestSent ? 'Connection request sent' : 'Send connection request'}</button></section></div>; }
+
+function Requests({ requests, sentRequests, connections, people, withdrawRequest, accept, setScreen }) {
+
+const [tab,setTab] = useState("incoming");
+
+const incoming = people.filter(person =>
+  requests.some(request => request.name === person.name)
+);
+
+const sent = people.filter(person =>
+  sentRequests.some(request => request.name === person.name)
+);
+
+const accepted = people.filter(person =>
+  connections?.some(connection => connection.name === person.name)
+);
+
+
+return (
+<section className="requests-page">
+
+<header className="requests-header">
+<div>
+<p className="eyebrow">CONNECTION CENTER</p>
+<h1>Requests</h1>
+<p>Manage roommate invitations and connections.</p>
+</div>
+</header>
+
+
+<div className="request-tabs">
+
+<button 
+className={tab==="incoming"?"active":""}
+onClick={()=>setTab("incoming")}
+>
+Incoming
+<span>{incoming.length}</span>
+</button>
+
+
+<button
+className={tab==="sent"?"active":""}
+onClick={()=>setTab("sent")}
+>
+Sent
+<span>{sent.length}</span>
+</button>
+
+
+<button
+className={tab==="accepted"?"active":""}
+onClick={()=>setTab("accepted")}
+>
+Accepted
+<span>{accepted.length}</span>
+</button>
+
+</div>
+
+
+
+<div className="requests-grid">
+
+
+{tab==="incoming" && incoming.map(person=>(
+
+<div className="request-card-new">
+
+<div className="request-user">
+
+<div 
+className="avatar"
+style={{background:person.color}}
+>
+{person.avatar}
+</div>
+
+
+<div>
+<h2>{person.name}</h2>
+<p>
+{person.year} · {shortBranch(person.branch)}
+</p>
+<p>
+⌂ {person.hostel}
+</p>
+</div>
+
+</div>
+
+
+<div className="match-pill">
+94% Match
+</div>
+
+
+<div className="request-tags">
+
+{person.preferences.interests.map(item=>(
+<span key={item}>{item}</span>
+))}
+
+</div>
+
+
+<p className="request-description">
+{person.bio}
+</p>
+
+
+<div className="request-actions-new">
+
+<button className="reject">
+Reject
+</button>
+
+
+<button 
+className="approve"
+onClick={()=>accept(person.name)}
+>
+Accept
+</button>
+
+
+</div>
+
+
+</div>
+
+))}
+
+
+
+{tab==="sent" && sent.map(person=>(
+
+<div className="request-card-new">
+
+<div className="request-user">
+
+<div 
+className="avatar"
+style={{background:person.color}}
+>
+{person.avatar}
+</div>
+
+
+<div>
+<h2>{person.name}</h2>
+<p>
+{person.year} · {shortBranch(person.branch)}
+</p>
+</div>
+
+
+</div>
+
+
+<div className="pending-pill">
+Pending
+</div>
+
+
+<button
+className="withdraw-new"
+onClick={()=>withdrawRequest(person.name)}
+>
+Withdraw request
+</button>
+
+
+</div>
+
+))}
+
+
+</div>
+
+</section>
+)
+
+}
+
+
+
+function RequestPanel({ requests, people, close, accept }) { return <div className="inbox-overlay"><section className="inbox"><header><div><p className="eyebrow">CONNECTION REQUESTS</p><h2>Notifications</h2></div><button className="close" onClick={close}>×</button></header>{requests.length ? requests.map(request => {
+
+ const person = people.find(
+   item => item.name === request.name
+ ); return <article className="request" key={request.name}><div className="avatar" style={{ background: person.color }}>{person.avatar}</div><div><h3>{person.name}</h3><p>{person.compatibility || 'A strong'} compatibility match.</p><small>
+  Sent {request.date}
+</small></div><div><button className="accept" onClick={() => accept(request.name)}>Accept</button><button className="decline" onClick={close}>Ignore</button></div></article>; }) : <div className="empty"><div>✦</div><h3>All caught up</h3><p>New requests will appear here.</p></div>}</section></div>; }
+
+function Chat({ connections, people, profile }) {
+
+const connectedPeople = people.filter(person =>
+  connections.some(connection => connection.name === person.name)
+);
+
+const [selected, setSelected] = useState(connectedPeople[0] || null);
+
+
+if(!selected){
+  return (
+    <>
+      <header className="app-head compact">
+        <div>
+          <p className="eyebrow">YOUR CONNECTIONS</p>
+          <h1>Chats</h1>
+          <p>Only accepted connections can message each other.</p>
+        </div>
+      </header>
+
+      <section className="feature-match">
+        <h2>No chats yet 💬</h2>
+        <p>
+          Accept a roommate request to start chatting.
+        </p>
+      </section>
+    </>
+  );
+} const [message, setMessage] = useState(''); return <><header className="app-head compact"><div><p className="eyebrow">YOUR CONNECTIONS</p><h1>Chats</h1><p>Only accepted connections can message each other.</p></div></header><div className="chat-workspace"><div className="chat-list"><b>Messages</b>{connectedPeople.length ? connectedPeople.map(person => <button className={selected.name === person.name ? 'chosen' : ''} key={person.name} onClick={() => setSelected(person)}><div className="avatar" style={{ background: person.color }}>{person.avatar}</div><span><strong>{person.name}</strong><small>Connected roommate match</small></span></button>) : <p>No chats yet.</p>}</div><div className="chat-main"><header><div className="avatar" style={{ background: selected.color }}>{selected.avatar}</div><div><b>{selected.name}</b><small>Connected roommate match</small></div></header><div className="conversation"><div className="date">Today</div><p className="bubble them">Hey {profile.name.split(' ')[0]}! Glad we connected. Want to compare room preferences?</p><p className="bubble me">Absolutely — I’m usually free after 7.</p></div><form className="message" onSubmit={event => { event.preventDefault(); setMessage(''); }}><input value={message} onChange={event => setMessage(event.target.value)} placeholder="Write a message..." /><button>↑</button></form></div></div></>; }
 
 function Settings({ profile, setProfile, tell, theme, setTheme }) { const [editing, setEditing] = useState(false); const [draft, setDraft] = useState(profile); const [notifications, setNotifications] = useState({ requests: true, chat: true, private: false, online: true }); const change = (field, value) => setDraft({ ...draft, [field]: value }); const changePref = (field, value) => setDraft({ ...draft, preferences: { ...draft.preferences, [field]: value } }); const save = () => { setProfile(draft); setEditing(false); tell('Profile and compatibility updated'); }; const chooseTheme = value => { const nextTheme = value.toLowerCase(); setTheme(nextTheme); document.documentElement.dataset.theme = nextTheme; localStorage.setItem('roommate-theme', nextTheme); tell(`${value} mode enabled`); };
  return <><header className="app-head compact"><div><p className="eyebrow">YOUR ACCOUNT</p><h1>Profile & settings</h1><p>Every profile field and preference is editable here.</p></div></header><div className="settings-grid"><section className="settings-card profile-card"><div className="avatar hero-avatar">{profile.name.split(' ').map(word => word[0]).join('').slice(0, 2)}</div><div><h2>{profile.name}</h2><p>{profile.year} · {profile.branch}</p><span className="verified">● Thapar student</span></div><button className="ghost profile-edit" onClick={() => { setDraft(profile); setEditing(!editing); }}>{editing ? 'Cancel' : 'Edit full profile'}</button></section>{editing ? <FullProfileForm draft={draft} change={change} changePref={changePref} save={save} cancel={() => setEditing(false)} /> : <ProfileSummary profile={profile} edit={() => { setDraft(profile); setEditing(true); }} />}<section className="settings-card"><h2>Notifications</h2><Toggle label="Connection requests" description="Know when someone wants to connect." value={notifications.requests} onChange={value => setNotifications({ ...notifications, requests: value })} /><Toggle label="Messages & chat" description="Get updates from your accepted matches." value={notifications.chat} onChange={value => setNotifications({ ...notifications, chat: value })} /></section><section className="settings-card"><h2>Appearance</h2><p>Choose how Roommate Finder looks on this device.</p><div className="theme-options"><button className={theme === 'light' ? 'theme-selected' : ''} onClick={() => chooseTheme('Light')}>☀ <b>Light</b><small>Bright and clean</small></button><button className={theme === 'dark' ? 'theme-selected' : ''} onClick={() => chooseTheme('Dark')}>☾ <b>Dark</b><small>Easy on your eyes</small></button></div></section><section className="settings-card"><h2>Privacy</h2><Toggle label="Private profile" description="Only approved connections see your full profile." value={notifications.private} onChange={value => setNotifications({ ...notifications, private: value })} /><Toggle label="Show online status" description="Let your connections know when you’re active." value={notifications.online} onChange={value => setNotifications({ ...notifications, online: value })} /></section><section className="settings-card danger-card"><h2>Account</h2><p>Deleting your account permanently removes your profile, matches, and chats.</p><button className="danger" onClick={() => window.confirm('Delete your Roommate Finder account permanently?') && tell('Account deletion requested')}>Delete account</button></section></div></>; }
