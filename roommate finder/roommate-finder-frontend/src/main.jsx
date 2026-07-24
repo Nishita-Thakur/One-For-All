@@ -191,7 +191,35 @@ return students
 
   if (screen === 'welcome') return <><TopBar /><Landing open={mode => { setAuthMode(mode); setScreen('auth'); }} /></>;
   if (screen === 'auth') return <><TopBar /><Auth mode={authMode} setMode={setAuthMode} back={() => setScreen('welcome')} continueTo={() => setScreen(authMode === 'signup' ? 'onboard' : 'dashboard')} /></>;
-  if (screen === 'onboard') return <><TopBar /><Onboarding profile={profile} setProfile={setProfile} step={onboardStep} setStep={setOnboardStep} done={() => { setScreen('dashboard'); tell('Profile created — welcome to Roommate Finder!'); }} /></>;
+  if (screen === 'onboard') return <><TopBar /><Onboarding profile={profile} setProfile={setProfile} step={onboardStep} setStep={setOnboardStep} done={async () => {
+console.log("CREATE PROFILE CLICKED");
+  const { data: { user } } = await supabase.auth.getUser();
+
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      full_name: profile.name,
+      branch: profile.branch,
+      academic_year: Number(profile.year.replace(/\D/g, "")),
+      gender: profile.gender?.toLowerCase(),
+      bio: profile.bio,
+      is_profile_complete: true
+    })
+    .eq("id", user.id);
+
+
+  if(error){
+    console.log("Profile save error:", error);
+    return;
+  }
+
+
+  setScreen("dashboard");
+
+  tell("Profile created — welcome to Roommate Finder!");
+
+}} /></>;
 
   return <><TopBar /><main className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
     <Sidebar screen={screen} setScreen={setScreen} profile={profile} initials={initials} open={accountOpen} setOpen={setAccountOpen} collapsed={sidebarCollapsed} toggleCollapsed={() => setSidebarCollapsed(value => !value)} sentRequestCount={sentRequests.length} signOut={() => { setScreen('welcome'); setAccountOpen(false); }} />
@@ -222,7 +250,126 @@ function TopBar() { return <header className="oneforall-bar"><img className="one
 
 function Landing({ open }) { const goTo = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return <main className="landing" id="top"><nav><div className="brand">Roommate Finder</div><div className="navlinks"><button className="nav-link" onClick={() => goTo('how-it-works')}>How it works</button><button className="nav-link" onClick={() => goTo('why-roommate-finder')}>Why Roommate Finder?</button><button className="ghost" onClick={() => open('signin')}>Sign in</button><button onClick={() => open('signup')}>Find your roommate</button></div></nav><section className="hero"><div><p className="eyebrow">MADE FOR THAPAR STUDENTS</p><h1>Your room feels better<br />with the <i>right person.</i></h1><p className="lede">Roommate Finder helps Thaparians find a compatible roommate based on the things that actually matter: routine, room habits, hostel and vibe.</p><button className="large" onClick={() => open('signup')}>Create your profile <b>→</b></button></div><div className="hero-card"><div className="card-head"><span>YOUR BEST MATCH</span><b>96% fit</b></div><div className="match-person"><div className="avatar big">AS</div><div><h3>Aarav Sharma</h3><p>2nd year · COE · Hostel H</p></div></div><div className="chips"><em>Early riser</em><em>Football</em><em>Clean space</em></div><button className="full" onClick={() => open('signup')}>Find your match</button></div></section><section className="landing-section how" id="how-it-works"><p className="eyebrow">HOW IT WORKS</p><h2>Find a roommate in three easy steps.</h2><div className="steps"><article><b>01</b><h3>Build your profile</h3><p>Tell us your hostel, room preference, daily routine and the things you enjoy.</p></article><article><b>02</b><h3>See compatible people</h3><p>We compare the details that make sharing a room comfortable, not just a course or year.</p></article><article><b>03</b><h3>Connect with confidence</h3><p>Review profiles, send a request and chat with the people who feel like a good fit.</p></article></div></section><section className="landing-section why" id="why-roommate-finder"><p className="eyebrow">WHY ROOMMATE FINDER</p><h2>A better room starts with a better match.</h2><div className="why-grid"><article><h3>Less guesswork</h3><p>Compare sleep schedules, cleanliness, study style and room type before moving in.</p></article><article><h3>Made for Thapar</h3><p>Hostel-aware matching makes it easy to find relevant people from your own campus community.</p></article><article><h3>More comfortable living</h3><p>Start conversations with shared expectations and make room life feel more like home.</p></article></div></section></main>; }
 
-function Auth({ mode, setMode, back, continueTo }) { const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); return <main className="auth-page"><section className="auth-card"><button className="back-link" onClick={back}>← Back to Roommate Finder</button><div className="brand">Roommate Finder</div><p className="eyebrow">THAPAR STUDENT COMMUNITY</p><h1>{mode === 'signup' ? 'Create your account' : 'Welcome back'}</h1><p>{mode === 'signup' ? 'Start with your Thapar email. Your complete profile comes next.' : 'Sign in to see your matches and conversations.'}</p><form onSubmit={event => { event.preventDefault(); continueTo(); }}><Field label="Thapar email" value={email} onChange={setEmail} placeholder="you@thapar.edu" /><Field label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" /><button className="full">{mode === 'signup' ? 'Continue to profile →' : 'Sign in →'}</button></form><div className="auth-switch">{mode === 'signup' ? 'Already have an account?' : 'New to Roommate Finder?'} <button onClick={() => setMode(mode === 'signup' ? 'signin' : 'signup')}>{mode === 'signup' ? 'Sign in' : 'Create an account'}</button></div></section></main>; }
+function Auth({ mode, setMode, back, continueTo }) {
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+
+  async function handleAuth(event){
+
+    event.preventDefault();
+    console.log("SIGNUP CLICKED", email, password);
+
+
+    const { data, error } = mode === "signup"
+      ?
+      await supabase.auth.signUp({
+        email,
+        password
+      })
+      :
+      await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+
+    if(error){
+      console.log(error.message);
+      return;
+    }
+
+
+    console.log("AUTH SUCCESS:", data);
+
+    continueTo();
+
+  }
+
+
+  return (
+    <main className="auth-page">
+
+      <section className="auth-card">
+
+        <button className="back-link" onClick={back}>
+          ← Back to Roommate Finder
+        </button>
+
+        <div className="brand">
+          Roommate Finder
+        </div>
+
+        <p className="eyebrow">
+          THAPAR STUDENT COMMUNITY
+        </p>
+
+        <h1>
+          {mode === 'signup'
+          ? 'Create your account'
+          : 'Welcome back'}
+        </h1>
+
+        <p>
+          {mode === 'signup'
+          ? 'Start with your Thapar email. Your complete profile comes next.'
+          : 'Sign in to see your matches and conversations.'}
+        </p>
+
+
+        <form onSubmit={handleAuth}>
+
+          <Field
+            label="Thapar email"
+            value={email}
+            onChange={setEmail}
+            placeholder="you@thapar.edu"
+          />
+
+
+          <Field
+            label="Password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            placeholder="••••••••"
+          />
+
+
+          <button className="full">
+            {mode === 'signup'
+            ? 'Continue to profile →'
+            : 'Sign in →'}
+          </button>
+
+        </form>
+
+
+        <div className="auth-switch">
+
+          {mode === 'signup'
+          ? 'Already have an account?'
+          : 'New to Roommate Finder?'}
+
+          <button
+            onClick={() =>
+              setMode(mode === 'signup' ? 'signin' : 'signup')
+            }
+          >
+            {mode === 'signup'
+            ? 'Sign in'
+            : 'Create an account'}
+          </button>
+
+        </div>
+
+      </section>
+
+    </main>
+  );
+
+}
 
 function Onboarding({ profile, setProfile, step, setStep, done }) {
   const update = (field, value) => setProfile(current => ({ ...current, [field]: value }));
