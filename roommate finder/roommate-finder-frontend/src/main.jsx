@@ -65,10 +65,9 @@ async function fetchMatches(){
 
 
   if(error){
-    console.log("Match error:", error);
-    return;
-  }
-
+  console.log("Match error:", JSON.stringify(error, null, 2));
+  return;
+}
 
   console.log("Matches from DB:", data);
 
@@ -121,13 +120,31 @@ const [connections, setConnections] = useState([
   const matches = useMemo(() => {
 
 return students
-.filter(person => person.gender === profile.gender)
+.filter(person =>
+  person.gender?.toLowerCase() === profile.gender?.toLowerCase()
+)
 .sort(
 (a,b)=>b.match_percentage-a.match_percentage
 )
 .map(person => ({
   ...person,
+
+  name: person.full_name,
+
+  year: `${person.academic_year}th year`,
+
+  hostel: person.preferred_hostel,
+
   compatibility: person.match_percentage,
+
+  avatar: person.full_name
+    ?.split(" ")
+    .map(x => x[0])
+    .join("")
+    .slice(0,2),
+
+  color: "#2563EB",
+
   preferences:{
     interests:[]
   }
@@ -214,12 +231,12 @@ console.log("CREATE PROFILE CLICKED");
     return;
   }
 
-  const { error: detailsError } = await supabase
-  .from("student_details")
-  .insert({
-    user_id: user.id,
-    academic_score: Number(profile.score)
-  });
+const { error: detailsError } = await supabase
+.from("student_details")
+.upsert({
+  user_id: user.id,
+  academic_score: Number(profile.score)
+});
 
 if(detailsError){
   console.log("Student details error:", detailsError);
@@ -227,7 +244,80 @@ if(detailsError){
 }
 
 
-  setScreen("dashboard");
+const { error: preferenceError } = await supabase
+.from("roommate_preferences")
+.insert({
+  user_id: user.id,
+
+  preferred_hostel: profile.hostel,
+
+  roommates_in_room:
+    profile.preferences.roomType === "Single" ? 1 :
+    profile.preferences.roomType === "Two sharing" ? 2 :
+    profile.preferences.roomType === "Three sharing" ? 3 : 4,
+
+  sleep_schedule: profile.preferences.sleep,
+
+  wake_up_time:
+    profile.preferences.wake === "5:30 AM" ? "05:30:00" :
+    profile.preferences.wake === "6:30 AM" ? "06:30:00" :
+    profile.preferences.wake === "7:00 AM" ? "07:00:00" :
+    profile.preferences.wake === "8:00 AM" ? "08:00:00" :
+    profile.preferences.wake === "9:00 AM" ? "09:00:00" :
+    profile.preferences.wake === "10:00 AM" ? "10:00:00" :
+    "11:00:00",
+
+  study_habit: profile.preferences.study,
+
+  cleanliness_level:
+    profile.preferences.clean === "Very tidy" ? 5 :
+    profile.preferences.clean === "Balanced" ? 3 : 1,
+
+  food_preference: profile.preferences.food,
+
+  noise_tolerance:
+    profile.preferences.noise === "Low" ? 1 :
+    profile.preferences.noise === "Medium" ? 3 : 5
+});
+
+
+if(preferenceError){
+  console.log("Preference save error:", preferenceError);
+  return;
+}
+
+
+const { data: interestData, error: interestFetchError } = await supabase
+  .from("interests")
+  .select("id, name");
+
+
+if(interestFetchError){
+  console.log("Interest fetch error:", interestFetchError);
+  return;
+}
+
+
+const selectedInterests = interestData
+  .filter(item => profile.preferences.interests.includes(item.name))
+  .map(item => ({
+    user_id: user.id,
+    interest_id: item.id
+  }));
+
+
+const { error: userInterestError } = await supabase
+  .from("user_interests")
+  .insert(selectedInterests);
+
+
+if(userInterestError){
+  console.log("User interest error:", userInterestError);
+  return;
+}
+
+
+setScreen("dashboard");
 
   tell("Profile created — welcome to Roommate Finder!");
 
