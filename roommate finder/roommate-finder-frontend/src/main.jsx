@@ -62,6 +62,8 @@ async function fetchMatches(){
 
   const { data, error } = await supabase
     .rpc("get_roommate_matches");
+    console.log("CURRENT USER:", await supabase.auth.getUser());
+console.log("MATCH RPC RESULT:", data, error);
 
 
   if(error){
@@ -75,6 +77,43 @@ async function fetchMatches(){
 
 }
 
+async function fetchSentRequests(){
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+
+  const { data, error } = await supabase
+    .from("roommate_requests")
+    .select(`
+      id,
+      status,
+      receiver_id,
+      profiles!roommate_requests_receiver_id_fkey(
+        full_name
+      )
+    `)
+    .eq("sender_id", user.id);
+
+
+  if(error){
+    console.log("Sent request error:", error);
+    return;
+  }
+
+
+  console.log("Sent requests:", data);
+
+
+  setSentRequests(
+    data.map(request => ({
+      id: request.id,
+      name: request.profiles.full_name,
+      status: request.status,
+      date: "Today"
+    }))
+  );
+
+}
 async function testProfiles(){
 
   const { data, error } = await supabase
@@ -93,7 +132,7 @@ async function testProfiles(){
 useEffect(()=>{
 
   testProfiles();
-
+  fetchSentRequests();
   fetchMatches();
 
 },[]);
@@ -175,15 +214,30 @@ return students
 
   tell(`${name} is now in your chats`);
 };
-  const sendRequest = person => {
+  const sendRequest = async (person) => {
 
   if (connections.some(item => item.name === person.name)) {
     return tell(`You are already connected with ${person.name}`);
   }
 
-  if (sentRequests.some(item => item.name === person.name)) {
-    return tell(`Your request to ${person.name} is already pending`);
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+
+  const { error } = await supabase
+    .from("roommate_requests")
+    .insert({
+      sender_id: user.id,
+      receiver_id: person.candidate_id,
+      status: "pending"
+    });
+
+
+  if(error){
+    console.log("Request error:", error);
+    return;
   }
+
 
   setSentRequests(old => [
     ...old,
@@ -193,6 +247,7 @@ return students
       date: "Today"
     }
   ]);
+
 
   tell(`Connection request sent to ${person.name}`);
 };
