@@ -1,4 +1,5 @@
 import { supabase } from "./lib/supabase";
+window.supabase = supabase;
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
@@ -47,17 +48,50 @@ function App() {
   const [authMode, setAuthMode] = useState('signup');
   const [onboardStep, setOnboardStep] = useState(0);
   const [theme, setTheme] = useState(initialTheme);
-  const [profile, setProfile] = useState({ name: 'Rishabh Sand', gender: 'Male', year: '1st year', branch: 'Computer Engineering', hostel: 'Hostel H', score: '94.2', bio: 'Looking for someone calm, kind, and up for late-night chai.', preferences: defaultPreferences });
+  const [profile, setProfile] = useState({
+ name:'',
+ gender:'',
+ year:'',
+ branch:'',
+ hostel:'',
+ score:'',
+ bio:'',
+ preferences: defaultPreferences
+});
   const [filter, setFilter] = useState('All');
   const [query, setQuery] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
-  const [requests, setRequests] = useState([
-  {
-    name: "Aarav Sharma",
-    status: "incoming",
-    date: "Today"
+  const [requests, setRequests] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+
+async function loadUserProfile(){
+  const {data:{user}} = await supabase.auth.getUser();
+
+  if(!user) return;
+
+
+  const {data, error} = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+
+  if(error){
+    console.log("Profile fetch error:", error);
+    return;
   }
-]);
+  console.log("LOADED PROFILE FROM DB:", data);
+  setProfile(prev => ({
+    ...prev,
+    name: data.full_name,
+    gender: data.gender?.charAt(0).toUpperCase() + data.gender?.slice(1).toLowerCase(),
+    branch: data.branch,
+    bio: data.bio
+  }));
+
+}
+
 async function fetchMatches(){
 
   const { data, error } = await supabase
@@ -65,13 +99,29 @@ async function fetchMatches(){
     console.log("CURRENT USER:", await supabase.auth.getUser());
 console.log("MATCH RPC RESULT:", data, error);
 
+console.log(
+  data.map(x => ({
+    id: x.candidate_id,
+    name: x.full_name,
+    percentage: x.match_percentage
+  }))
+);
 
   if(error){
   console.log("Match error:", JSON.stringify(error, null, 2));
   return;
 }
 
-  console.log("Matches from DB:", data);
+const { data: { user } } = await supabase.auth.getUser();
+
+console.log("LOGGED USER:", user.id);
+  console.log(
+  data.map(x => ({
+    id: x.candidate_id,
+    name: x.full_name,
+    percentage: x.match_percentage
+  }))
+);
 
   setStudents(data);
 
@@ -79,8 +129,7 @@ console.log("MATCH RPC RESULT:", data, error);
 
 async function fetchSentRequests(){
 
-  const { data: { user } } = await supabase.auth.getUser();
-
+  const { data:{user} } = await supabase.auth.getUser();
 
   const { data, error } = await supabase
     .from("roommate_requests")
@@ -89,7 +138,12 @@ async function fetchSentRequests(){
       status,
       receiver_id,
       profiles!roommate_requests_receiver_id_fkey(
-        full_name
+        id,
+        full_name,
+        branch,
+        academic_year,
+        gender,
+        bio
       )
     `)
     .eq("sender_id", user.id);
@@ -106,12 +160,77 @@ async function fetchSentRequests(){
 
   setSentRequests(
     data.map(request => ({
-      id: request.id,
+      ...request.profiles,
+
       name: request.profiles.full_name,
+
+      avatar: request.profiles.full_name
+        ?.split(" ")
+        .map(x=>x[0])
+        .join("")
+        .slice(0,2),
+
+      color:"#2563EB",
+
+      year:
+        request.profiles.academic_year
+        ? `${request.profiles.academic_year} year`
+        : "",
+
+      branch: request.profiles.branch,
+
       status: request.status,
-      date: "Today"
+
+      date:"Today"
     }))
   );
+
+}
+
+async function fetchIncomingRequests(){
+
+  const { data:{user} } = await supabase.auth.getUser();
+
+
+  const { data, error } = await supabase
+    .from("roommate_requests")
+    .select(`
+      id,
+      status,
+      sender_id,
+      created_at,
+      profiles!roommate_requests_sender_id_fkey(
+        id,
+        full_name,
+        branch,
+        academic_year,
+        gender,
+        bio
+      )
+    `)
+    .eq("receiver_id", user.id)
+    .eq("status", "pending");
+
+
+  if(error){
+    console.log("Incoming request error:", error);
+    return;
+  }
+
+
+  console.log("Incoming requests:", data);
+
+
+  setRequests(
+ data.map(request => ({
+   ...request.profiles,
+   name: request.profiles.full_name,
+   id: request.id,
+   candidate_id: request.sender_id,
+   status: "incoming",
+   date: "Today"
+ }))
+);
 
 }
 async function testProfiles(){
@@ -131,11 +250,27 @@ async function testProfiles(){
 
 useEffect(()=>{
 
-  testProfiles();
-  fetchSentRequests();
-  fetchMatches();
+  async function init(){
 
-},[]);
+    const {data:{user}} = await supabase.auth.getUser();
+
+    console.log("AUTH USER:", user);
+
+    setCurrentUser(user);
+
+    if(user){
+      await loadUserProfile();
+      await testProfiles();
+      await fetchSentRequests();
+      await fetchMatches();
+      await fetchIncomingRequests();
+    }
+
+  }
+
+  init();
+
+},[screen]);
 
 const [sentRequests, setSentRequests] = useState([]);
 const [students, setStudents] = useState([]);
@@ -159,18 +294,13 @@ const [connections, setConnections] = useState([
   const matches = useMemo(() => {
 
 return students
-.filter(person =>
-  person.gender?.toLowerCase() === profile.gender?.toLowerCase()
-)
-.sort(
-(a,b)=>b.match_percentage-a.match_percentage
-)
 .map(person => ({
+  
   ...person,
 
   name: person.full_name,
 
-  year: `${person.academic_year}th year`,
+  year: `${person.academic_year}${person.academic_year === 1 ? "st" : "th"} year`,
 
   hostel: person.preferred_hostel,
 
@@ -185,11 +315,51 @@ return students
   color: "#2563EB",
 
   preferences:{
-    interests:[]
-  }
-}));
+  interests: person.interests || [],
 
-},[students,profile.gender]);
+  roomType:
+    person.roommates_in_room === 1 ? "Single" :
+    person.roommates_in_room === 2 ? "Two sharing" :
+    person.roommates_in_room === 3 ? "Three sharing" :
+    "Four sharing",
+
+  roommateYear: "Any year",
+
+  sleep: person.sleep_schedule,
+
+  wake: new Date(`1970-01-01T${person.wake_up_time}`)
+  .toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit"
+  }),
+
+  study: person.study_habit,
+
+  clean:
+    person.cleanliness_level >= 5
+      ? "Very tidy"
+      : person.cleanliness_level >= 3
+      ? "Balanced"
+      : "Relaxed",
+
+  food: person.food_preference,
+
+  noise:
+    person.noise_tolerance === 1
+      ? "Low"
+      : person.noise_tolerance === 3
+      ? "Medium"
+      : "High"
+}
+
+}))
+
+.sort(
+(a,b)=>b.compatibility-a.compatibility
+);
+
+
+},[students]);
   const shown = matches.filter(person => (filter === 'All' || person.hostel === filter) && person.name.toLowerCase().includes(query.toLowerCase()));
   const accept = name => {
 
@@ -216,27 +386,26 @@ return students
 };
   const sendRequest = async (person) => {
 
-  if (connections.some(item => item.name === person.name)) {
-    return tell(`You are already connected with ${person.name}`);
+  if (sentRequests.some(item => item.name === person.name)) {
+    return tell(`Request already sent to ${person.name}`);
   }
 
-
-  const { data: { user } } = await supabase.auth.getUser();
-
-
-  const { error } = await supabase
-    .from("roommate_requests")
-    .insert({
-      sender_id: user.id,
-      receiver_id: person.candidate_id,
-      status: "pending"
-    });
+  const { data, error } = await supabase.rpc(
+    "send_roommate_request",
+    {
+      p_receiver_id: person.candidate_id
+    }
+  );
 
 
   if(error){
     console.log("Request error:", error);
+    tell(error.message);
     return;
   }
+
+
+  console.log("Request sent:", data);
 
 
   setSentRequests(old => [
@@ -379,7 +548,27 @@ setScreen("dashboard");
 }} /></>;
 
   return <><TopBar /><main className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-    <Sidebar screen={screen} setScreen={setScreen} profile={profile} initials={initials} open={accountOpen} setOpen={setAccountOpen} collapsed={sidebarCollapsed} toggleCollapsed={() => setSidebarCollapsed(value => !value)} sentRequestCount={sentRequests.length} signOut={() => { setScreen('welcome'); setAccountOpen(false); }} />
+    <Sidebar screen={screen} setScreen={setScreen} profile={profile} initials={initials} open={accountOpen} setOpen={setAccountOpen} collapsed={sidebarCollapsed} toggleCollapsed={() => setSidebarCollapsed(value => !value)} sentRequestCount={requests.length} signOut={async () => {
+
+  await supabase.auth.signOut();
+
+  setProfile({
+    name: "",
+    gender: "",
+    year: "",
+    branch: "",
+    hostel: "",
+    score: "",
+    bio: "",
+    preferences: defaultPreferences
+  });
+
+  setAccountOpen(false);
+  setScreen("welcome");
+
+  window.location.reload();
+
+}} />
     <section className="app-content">
       {screen === 'dashboard' && <Dashboard profile={profile} matches={matches} requests={requests} openRequests={() => setRequestPanel(true)} openPerson={setPersonModal} sendRequest={sendRequest} sentRequests={sentRequests} setScreen={setScreen} />}
       {screen === 'find' && <Finder profile={profile} shown={shown} filter={filter} setFilter={setFilter} query={query} setQuery={setQuery} openPerson={setPersonModal} sendRequest={sendRequest} sentRequests={sentRequests} />}
@@ -551,7 +740,7 @@ function Onboarding({ profile, setProfile, step, setStep, done }) {
         </>}
         {step === 1 && <>
           <div className="hostel-note">Showing {profile.gender === 'Male' ? 'boys’' : 'girls’'} hostels only</div>
-          <Select label="Preferred hostel" value={profile.hostel} options={HOSTELS[profile.gender]} onChange={value => update('hostel', value)} />
+          <Select label="Preferred hostel" value={profile.hostel} options={HOSTELS[profile.gender] || []} onChange={value => update('hostel', value)} />
           <Select label="Room type" value={profile.preferences.roomType} options={ROOM_TYPES} onChange={value => updatePreference('roomType', value)} />
           <Select label="Food preference" value={profile.preferences.food} options={['Vegetarian', 'Non-vegetarian', 'No preference']} onChange={value => updatePreference('food', value)} />
           <Select label="Roommate year" value={profile.preferences.roommateYear} options={['Same year', 'Any year', 'No preference']} onChange={value => updatePreference('roommateYear', value)} />
@@ -608,7 +797,7 @@ if(!top){
   );
 } return <><header className="app-head"><div><p className="eyebrow">GOOD AFTERNOON, {profile.name.split(' ')[0].toUpperCase()}</p><h1>People you’ll get along with.</h1><p>Your compatibility updates every time you update your preferences.</p></div><button className="bell" onClick={openRequests}>♢{requests.length > 0 && <i />}</button></header><section className="feature-match"><div><p className="eyebrow">TOP MATCH FOR YOU</p><h2>{top.name} <span>{top.compatibility}% compatible</span></h2><p>Shared routines, room habits, and interests make this an especially strong fit.</p><div className="chips">{top.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><button onClick={() => openPerson(top)}>View full profile →</button></div><div className="feature-art"><div className="avatar huge" style={{ background: top.color }}>{top.avatar}</div><div className="quote">“{top.bio}”</div></div></section><section className="section-head"><div><h2>Great fits</h2><p>Matches from your current preferences.</p></div><button className="text-button" onClick={() => setScreen('find')}>See all →</button></section><div className="card-grid">{matches.slice(1, 4).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div></>; }
 
-function Finder({ profile, shown, filter, setFilter, query, setQuery, openPerson, sendRequest, sentRequests }) { return <><header className="app-head compact"><div><p className="eyebrow">EXPLORE YOUR COMMUNITY</p><h1>Find your people.</h1></div></header><div className="searchbar"><span>⌕</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by name, branch, interest..." /></div><div className="filter-row"><b>Showing {shown.length} {profile.gender === 'Female' ? 'women' : 'men'}</b>{['All', ...HOSTELS[profile.gender]].map(hostel => <button key={hostel} className={filter === hostel ? 'selected' : ''} onClick={() => setFilter(hostel)}>{hostel}</button>)}</div><section className="near-title"><div><h2>Best fits</h2><p>Highly compatible with your lifestyle.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility >= 82).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div><section className="near-title"><div><h2>Worth a look</h2><p>Different in a few ways, still potentially a good room fit.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility < 82).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div></>; }
+function Finder({ profile, shown, filter, setFilter, query, setQuery, openPerson, sendRequest, sentRequests }) { return <><header className="app-head compact"><div><p className="eyebrow">EXPLORE YOUR COMMUNITY</p><h1>Find your people.</h1></div></header><div className="searchbar"><span>⌕</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by name, branch, interest..." /></div><div className="filter-row"><b>Showing {shown.length} {profile.gender === 'Female' ? 'women' : 'men'}</b>{['All', ...HOSTELS[profile.gender]].map(hostel => <button key={hostel} className={filter === hostel ? 'selected' : ''} onClick={() => setFilter(hostel)}>{hostel}</button>)}</div><section className="near-title"><div><h2>Best fits</h2><p>Highly compatible with your lifestyle.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility >= 82).map(person => <PersonCard key={person.candidate_id} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div><section className="near-title"><div><h2>Worth a look</h2><p>Different in a few ways, still potentially a good room fit.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility < 82).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div></>; }
 
 function PersonCard({ person, openPerson, sendRequest, requestSent }) { return <article className="person-card"><div className="person-top"><div className="avatar" style={{ background: person.color }}>{person.avatar}</div><span className="score">{person.compatibility}%</span></div><h3>{person.name}</h3><p>{person.year} · {shortBranch(person.branch)}</p><p className="hostel">⌂ {person.hostel}</p><div className="chips">{person.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><div className="card-actions"><button className="view" onClick={() => openPerson(person)}>View profile</button><button className={`connect ${requestSent ? 'sent' : ''}`} onClick={() => sendRequest(person)} disabled={requestSent}>{requestSent ? 'Request sent' : 'Connect +'}</button></div></article>; }
 
@@ -618,13 +807,9 @@ function Requests({ requests, sentRequests, connections, people, withdrawRequest
 
 const [tab,setTab] = useState("incoming");
 
-const incoming = people.filter(person =>
-  requests.some(request => request.name === person.name)
-);
+const incoming = requests;
 
-const sent = people.filter(person =>
-  sentRequests.some(request => request.name === person.name)
-);
+const sent = sentRequests;
 
 const accepted = people.filter(person =>
   connections?.some(connection => connection.name === person.name)
@@ -712,7 +897,7 @@ style={{background:person.color}}
 
 <div className="request-tags">
 
-{person.preferences.interests.map(item=>(
+{(person.preferences?.interests || []).map(item=>(
 <span key={item}>{item}</span>
 ))}
 
@@ -726,6 +911,14 @@ style={{background:person.color}}
 
 <div className="request-actions-new">
 
+<button 
+className="view"
+onClick={() => setScreen("find")}
+>
+View profile
+</button>
+
+
 <button className="reject">
 Reject
 </button>
@@ -737,7 +930,6 @@ onClick={()=>accept(person.name)}
 >
 Accept
 </button>
-
 
 </div>
 
@@ -778,12 +970,24 @@ Pending
 </div>
 
 
+<div className="request-actions-new">
+
+<button 
+className="view"
+onClick={() => console.log(person)}
+>
+View profile
+</button>
+
+
 <button
 className="withdraw-new"
 onClick={()=>withdrawRequest(person.name)}
 >
 Withdraw request
 </button>
+
+</div>
 
 
 </div>
