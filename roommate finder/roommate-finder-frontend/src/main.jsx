@@ -49,14 +49,14 @@ function App() {
   const [onboardStep, setOnboardStep] = useState(0);
   const [theme, setTheme] = useState(initialTheme);
   const [profile, setProfile] = useState({
- name:'',
- gender:'',
- year:'',
- branch:'',
- hostel:'',
- score:'',
- bio:'',
- preferences: defaultPreferences
+  name: '',
+  gender: 'Male',
+  year: '',
+  branch: '',
+  hostel: HOSTELS.Male[0],
+  score: '',
+  bio: '',
+  preferences: defaultPreferences
 });
   const [filter, setFilter] = useState('All');
   const [query, setQuery] = useState('');
@@ -83,12 +83,19 @@ async function loadUserProfile(){
   }
   console.log("LOADED PROFILE FROM DB:", data);
   setProfile(prev => ({
-    ...prev,
-    name: data.full_name,
-    gender: data.gender?.charAt(0).toUpperCase() + data.gender?.slice(1).toLowerCase(),
-    branch: data.branch,
-    bio: data.bio
-  }));
+  ...prev,
+
+  name: data.full_name ?? prev.name,
+
+  gender: data.gender
+    ? data.gender.charAt(0).toUpperCase() +
+      data.gender.slice(1).toLowerCase()
+    : prev.gender,
+
+  branch: data.branch ?? prev.branch,
+
+  bio: data.bio ?? prev.bio
+}));
 
 }
 
@@ -159,31 +166,33 @@ async function fetchSentRequests(){
 
 
   setSentRequests(
-    data.map(request => ({
-      ...request.profiles,
+  data.map(request => ({
+    ...request.profiles,
 
-      name: request.profiles.full_name,
+    candidate_id: request.receiver_id,   // <-- ADD THIS LINE
 
-      avatar: request.profiles.full_name
-        ?.split(" ")
-        .map(x=>x[0])
-        .join("")
-        .slice(0,2),
+    name: request.profiles.full_name,
 
-      color:"#2563EB",
+    avatar: request.profiles.full_name
+      ?.split(" ")
+      .map(x => x[0])
+      .join("")
+      .slice(0, 2),
 
-      year:
-        request.profiles.academic_year
+    color: "#2563EB",
+
+    year:
+      request.profiles.academic_year
         ? `${request.profiles.academic_year} year`
         : "",
 
-      branch: request.profiles.branch,
+    branch: request.profiles.branch,
 
-      status: request.status,
+    status: request.status,
 
-      date:"Today"
-    }))
-  );
+    date: "Today"
+  }))
+);
 
 }
 
@@ -233,6 +242,98 @@ async function fetchIncomingRequests(){
 );
 
 }
+
+
+async function openCandidateProfile(candidateId){
+
+  const { data, error } = await supabase.rpc(
+    "get_candidate_profile",
+    {
+      p_candidate_id: candidateId
+    }
+  );
+
+  if (error) {
+  console.log(error);
+  alert(error.message);
+  return;
+}
+
+  const person = data[0];
+
+  setPersonModal({
+
+    candidate_id: person.candidate_id,
+
+    name: person.full_name,
+
+    avatar: person.full_name
+      ?.split(" ")
+      .map(x=>x[0])
+      .join("")
+      .slice(0,2)
+      .toUpperCase(),
+
+    color:"#2563EB",
+
+    bio: person.bio,
+
+    year: `${person.academic_year}${
+      person.academic_year===1 ? "st" :
+      person.academic_year===2 ? "nd" :
+      person.academic_year===3 ? "rd" : "th"
+    } year`,
+
+    branch: person.branch,
+
+    hostel: person.preferred_hostel,
+
+    compatibility: null,
+
+    preferences:{
+
+      interests: person.interests || [],
+
+      roomType:
+        person.roommates_in_room===1 ? "Single" :
+        person.roommates_in_room===2 ? "Two sharing" :
+        person.roommates_in_room===3 ? "Three sharing" :
+        "Four sharing",
+
+      roommateYear:"Any year",
+
+      sleep: person.sleep_schedule,
+
+      wake: new Date(
+        `1970-01-01T${person.wake_up_time}`
+      ).toLocaleTimeString([],{
+        hour:"2-digit",
+        minute:"2-digit"
+      }),
+
+      study: person.study_habit,
+
+      clean:
+        person.cleanliness_level>=5
+        ? "Very tidy"
+        : person.cleanliness_level>=3
+        ? "Balanced"
+        : "Relaxed",
+
+      food: person.food_preference,
+
+      noise:
+        person.noise_tolerance===1
+        ? "Low"
+        : person.noise_tolerance===3
+        ? "Medium"
+        : "High"
+    }
+
+  });
+
+}
+
 async function testProfiles(){
 
   const { data, error } = await supabase
@@ -258,7 +359,7 @@ useEffect(()=>{
 
     setCurrentUser(user);
 
-    if(user){
+    if(user && screen !== "onboard"){
       await loadUserProfile();
       await testProfiles();
       await fetchSentRequests();
@@ -290,7 +391,12 @@ const [connections, setConnections] = useState([
     localStorage.setItem('roommate-theme', theme);
   }, [theme]);
   const tell = message => { setToast(message); setTimeout(() => setToast(''), 2400); };
-  const initials = profile.name.split(' ').map(word => word[0]).join('').slice(0, 2);
+  const initials = (profile.name ?? "")
+  .split(" ")
+  .filter(Boolean)
+  .map(word => word[0])
+  .join("")
+  .slice(0, 2);
   const matches = useMemo(() => {
 
 return students
@@ -436,6 +542,13 @@ return students
 console.log("CREATE PROFILE CLICKED");
   const { data: { user } } = await supabase.auth.getUser();
 
+  console.log("PROFILE BEFORE SAVE:", profile);
+
+console.log("YEAR =", profile.year);
+console.log(
+  "ACADEMIC YEAR =",
+  Number(profile.year.replace(/\D/g, ""))
+);
 
   const { error } = await supabase
     .from("profiles")
@@ -459,7 +572,10 @@ const { error: detailsError } = await supabase
 .from("student_details")
 .upsert({
   user_id: user.id,
-  academic_score: Number(profile.score)
+  academic_score:
+  profile.score === ""
+    ? null
+    : Number(profile.score)
 });
 
 if(detailsError){
@@ -570,10 +686,10 @@ setScreen("dashboard");
 
 }} />
     <section className="app-content">
-      {screen === 'dashboard' && <Dashboard profile={profile} matches={matches} requests={requests} openRequests={() => setRequestPanel(true)} openPerson={setPersonModal} sendRequest={sendRequest} sentRequests={sentRequests} setScreen={setScreen} />}
-      {screen === 'find' && <Finder profile={profile} shown={shown} filter={filter} setFilter={setFilter} query={query} setQuery={setQuery} openPerson={setPersonModal} sendRequest={sendRequest} sentRequests={sentRequests} />}
+      {screen === 'dashboard' && <Dashboard profile={profile} matches={matches} requests={requests} openRequests={() => setRequestPanel(true)} openPerson={openCandidateProfile} sendRequest={sendRequest} sentRequests={sentRequests} setScreen={setScreen} />}
+      {screen === 'find' && <Finder profile={profile} shown={shown} filter={filter} setFilter={setFilter} query={query} setQuery={setQuery} openPerson={openCandidateProfile} sendRequest={sendRequest} sentRequests={sentRequests} />}
       {screen === 'requests' && 
-<Requests 
+<Requests
 requests={requests}
 sentRequests={sentRequests}
 connections={connections}
@@ -581,6 +697,7 @@ people={students}
 withdrawRequest={withdrawRequest}
 accept={accept}
 setScreen={setScreen}
+openPerson={openCandidateProfile}
 />
 }
       {screen === 'chat' && <Chat connections={connections} people={students} profile={profile} />}
@@ -718,6 +835,7 @@ function Auth({ mode, setMode, back, continueTo }) {
 }
 
 function Onboarding({ profile, setProfile, step, setStep, done }) {
+  console.log(JSON.stringify(profile, null, 2));
   const update = (field, value) => setProfile(current => ({ ...current, [field]: value }));
   const updatePreference = (field, value) => setProfile(current => ({ ...current, preferences: { ...current.preferences, [field]: value } }));
   const titles = ['Let’s start with you.', 'Your room, your rules.', 'The little things matter.', 'Make it feel like you.'];
@@ -735,7 +853,15 @@ function Onboarding({ profile, setProfile, step, setStep, done }) {
             <Select label="Year" value={profile.year} options={['1st year', '2nd year', '3rd year', '4th year']} onChange={value => update('year', value)} />
             <Select label="Gender" value={profile.gender} options={['Male', 'Female']} onChange={value => setProfile(current => ({ ...current, gender: value, hostel: HOSTELS[value][0] }))} />
           </div>
-          <Select label="Branch" value={profile.branch} options={BRANCHES} onChange={value => update('branch', value)} />
+          <Select
+  label="Branch"
+  value={profile.branch}
+  options={BRANCHES}
+  onChange={value => {
+    console.log("BRANCH CHANGED:", value);
+    update("branch", value);
+  }}
+/>
           <Field label={profile.year === '1st year' ? 'JEE percentile' : 'CGPA'} value={profile.score} onChange={value => update('score', value)} hint="Used only to find peers in a similar academic range." />
         </>}
         {step === 1 && <>
@@ -778,7 +904,7 @@ if(!top){
       <header className="app-head">
         <div>
           <p className="eyebrow">
-            GOOD AFTERNOON, {profile.name.split(' ')[0].toUpperCase()}
+            GOOD AFTERNOON, {(profile.name ?? "").split(" ")[0]?.toUpperCase()}
           </p>
           <h1>People you’ll get along with.</h1>
           <p>
@@ -795,15 +921,24 @@ if(!top){
       </section>
     </>
   );
-} return <><header className="app-head"><div><p className="eyebrow">GOOD AFTERNOON, {profile.name.split(' ')[0].toUpperCase()}</p><h1>People you’ll get along with.</h1><p>Your compatibility updates every time you update your preferences.</p></div><button className="bell" onClick={openRequests}>♢{requests.length > 0 && <i />}</button></header><section className="feature-match"><div><p className="eyebrow">TOP MATCH FOR YOU</p><h2>{top.name} <span>{top.compatibility}% compatible</span></h2><p>Shared routines, room habits, and interests make this an especially strong fit.</p><div className="chips">{top.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><button onClick={() => openPerson(top)}>View full profile →</button></div><div className="feature-art"><div className="avatar huge" style={{ background: top.color }}>{top.avatar}</div><div className="quote">“{top.bio}”</div></div></section><section className="section-head"><div><h2>Great fits</h2><p>Matches from your current preferences.</p></div><button className="text-button" onClick={() => setScreen('find')}>See all →</button></section><div className="card-grid">{matches.slice(1, 4).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div></>; }
+} return <><header className="app-head"><div><p className="eyebrow">GOOD AFTERNOON, {profile.name.split(' ')[0].toUpperCase()}</p><h1>People you’ll get along with.</h1><p>Your compatibility updates every time you update your preferences.</p></div><button className="bell" onClick={openRequests}>♢{requests.length > 0 && <i />}</button></header><section className="feature-match"><div><p className="eyebrow">TOP MATCH FOR YOU</p><h2>{top.name} <span>{top.compatibility}% compatible</span></h2><p>Shared routines, room habits, and interests make this an especially strong fit.</p><div className="chips">{top.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><button onClick={() => openPerson(top.candidate_id)}>View full profile →</button></div><div className="feature-art"><div className="avatar huge" style={{ background: top.color }}>{top.avatar}</div><div className="quote">“{top.bio}”</div></div></section><section className="section-head"><div><h2>Great fits</h2><p>Matches from your current preferences.</p></div><button className="text-button" onClick={() => setScreen('find')}>See all →</button></section><div className="card-grid">{matches.slice(1, 4).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div></>; }
 
 function Finder({ profile, shown, filter, setFilter, query, setQuery, openPerson, sendRequest, sentRequests }) { return <><header className="app-head compact"><div><p className="eyebrow">EXPLORE YOUR COMMUNITY</p><h1>Find your people.</h1></div></header><div className="searchbar"><span>⌕</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by name, branch, interest..." /></div><div className="filter-row"><b>Showing {shown.length} {profile.gender === 'Female' ? 'women' : 'men'}</b>{['All', ...HOSTELS[profile.gender]].map(hostel => <button key={hostel} className={filter === hostel ? 'selected' : ''} onClick={() => setFilter(hostel)}>{hostel}</button>)}</div><section className="near-title"><div><h2>Best fits</h2><p>Highly compatible with your lifestyle.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility >= 82).map(person => <PersonCard key={person.candidate_id} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div><section className="near-title"><div><h2>Worth a look</h2><p>Different in a few ways, still potentially a good room fit.</p></div></section><div className="card-grid">{shown.filter(person => person.compatibility < 82).map(person => <PersonCard key={person.name} person={person} openPerson={openPerson} sendRequest={sendRequest} requestSent={sentRequests.includes(person.name)} />)}</div></>; }
 
-function PersonCard({ person, openPerson, sendRequest, requestSent }) { return <article className="person-card"><div className="person-top"><div className="avatar" style={{ background: person.color }}>{person.avatar}</div><span className="score">{person.compatibility}%</span></div><h3>{person.name}</h3><p>{person.year} · {shortBranch(person.branch)}</p><p className="hostel">⌂ {person.hostel}</p><div className="chips">{person.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><div className="card-actions"><button className="view" onClick={() => openPerson(person)}>View profile</button><button className={`connect ${requestSent ? 'sent' : ''}`} onClick={() => sendRequest(person)} disabled={requestSent}>{requestSent ? 'Request sent' : 'Connect +'}</button></div></article>; }
+function PersonCard({ person, openPerson, sendRequest, requestSent }) { return <article className="person-card"><div className="person-top"><div className="avatar" style={{ background: person.color }}>{person.avatar}</div><span className="score">{person.compatibility}%</span></div><h3>{person.name}</h3><p>{person.year} · {shortBranch(person.branch)}</p><p className="hostel">⌂ {person.hostel}</p><div className="chips">{person.preferences.interests.slice(0, 3).map(item => <em key={item}>{item}</em>)}</div><div className="card-actions"><button className="view" onClick={() => openPerson(person.candidate_id)}>View profile</button><button className={`connect ${requestSent ? 'sent' : ''}`} onClick={() => sendRequest(person)} disabled={requestSent}>{requestSent ? 'Request sent' : 'Connect +'}</button></div></article>; }
 
 function ProfileModal({ person, profile, close, connect, requestSent }) { const prefs = person.preferences; return <div className="inbox-overlay profile-overlay"><section className="profile-modal"><header><div><p className="eyebrow">ROOMMATE PROFILE</p><h2>{person.name}</h2></div><button className="close" onClick={close}>×</button></header><div className="modal-person"><div className="avatar huge" style={{ background: person.color }}>{person.avatar}</div><div><p>{person.year} · {person.branch}</p><p>⌂ {person.hostel}</p><span className="score">{person.compatibility}% compatible with you</span></div></div><p className="bio">{person.bio}</p><h3>Room & lifestyle preferences</h3><div className="pref-grid"><Preference label="Room type" value={prefs.roomType} /><Preference label="Food" value={prefs.food} /><Preference label="Sleep style" value={prefs.sleep} /><Preference label="Wake-up time" value={prefs.wake} /><Preference label="Cleanliness" value={prefs.clean} /><Preference label="Study vibe" value={prefs.study} /><Preference label="Noise tolerance" value={prefs.noise} /><Preference label="Roommate year" value={prefs.roommateYear} /></div><h3>Interests</h3><div className="chips">{prefs.interests.map(item => <em key={item}>{item}</em>)}</div><button className={`full modal-connect ${requestSent ? 'sent' : ''}`} onClick={() => { if (!requestSent) connect(); close(); }} disabled={requestSent}>{requestSent ? 'Connection request sent' : 'Send connection request'}</button></section></div>; }
 
-function Requests({ requests, sentRequests, connections, people, withdrawRequest, accept, setScreen }) {
+function Requests({
+requests,
+sentRequests,
+connections,
+people,
+withdrawRequest,
+accept,
+setScreen,
+openPerson
+}) {
 
 const [tab,setTab] = useState("incoming");
 
@@ -911,11 +1046,11 @@ style={{background:person.color}}
 
 <div className="request-actions-new">
 
-<button 
+<button
 className="view"
-onClick={() => setScreen("find")}
+onClick={() => openPerson(person.candidate_id)}
 >
-View profile
+View Profile
 </button>
 
 
@@ -972,11 +1107,11 @@ Pending
 
 <div className="request-actions-new">
 
-<button 
+<button
 className="view"
-onClick={() => console.log(person)}
+onClick={() => openPerson(person.candidate_id)}
 >
-View profile
+View Profile
 </button>
 
 
@@ -1052,8 +1187,26 @@ function FullProfileForm({ draft, change, changePref, save, cancel }) { const se
 function InterestPicker({ selected, onChange }) { const interests = ['Sports', 'Music', 'Gaming', 'Reading', 'Cooking', 'Travel', 'Movies']; return <div className="choice"><div>{interests.map(item => <button key={item} className={selected.includes(item) ? 'picked' : ''} onClick={() => onChange(selected.includes(item) ? selected.filter(value => value !== item) : [...selected, item])}>{item}</button>)}</div></div>; }
 function Toggle({ label, description, value, onChange }) { return <div className="toggle-row"><div><b>{label}</b><p>{description}</p></div><button className={value ? 'toggle on' : 'toggle'} onClick={() => onChange(!value)}><i /></button></div>; }
 function Preference({ label, value }) { return <div className="preference"><small>{label}</small><b>{value}</b></div>; }
-function Field({ label, value, onChange, placeholder = '', type = 'text', textarea }) { return <label className="field">{label}{textarea ? <textarea value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} /> : <input type={type} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} />}</label>; }
-function Select({ label, value, options, onChange }) { return <label className="field">{label}<select value={value} onChange={event => onChange(event.target.value)}>{options.map(option => <option key={option}>{option}</option>)}</select></label>; }
+function Field({ label, value, onChange, placeholder = '', type = 'text', textarea }) { return <label className="field">{label}{textarea ? <textarea value={value ?? ""} onChange={event => onChange(event.target.value)} placeholder={placeholder} /> : <input type={type} value={value ?? ""} onChange={event => onChange(event.target.value)} placeholder={placeholder} />}</label>; }
+function Select({ label, value, options, onChange }) {
+  return (
+    <label className="field">
+      {label}
+
+      <select
+        value={value ?? ""}
+        onChange={event => onChange(event.target.value)}
+      >
+        {options.map(option => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+
+    </label>
+  );
+}
 function shortBranch(branch) { return branch.includes('Computer Engineering') ? 'COE' : branch.includes('Computer Science') ? 'CSE' : branch; }
 
 createRoot(document.getElementById('root')).render(<App />);
