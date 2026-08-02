@@ -2594,12 +2594,22 @@ width:100%;
 
     border-radius:24px;
 
-    padding:26px;
+    padding:24px;
+display:flex;
+flex-direction:column;
+gap:18px;
 
     box-shadow:var(--shadow);
 
     transition:.25s;
 
+}
+
+.request-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    margin-bottom:18px;
 }
 
 
@@ -2645,23 +2655,25 @@ width:100%;
 
 .match-pill,
 .pending-pill{
+    position:static;
 
-    position:absolute;
+    display:flex;
+    align-items:center;
 
-    top:25px;
-
-    right:25px;
+    height:fit-content;
 
     padding:7px 14px;
 
     border-radius:999px;
 
+    background:rgba(245,158,11,.15);
+
+    color:#fbbf24;
+
     font-size:.75rem;
 
-    font-weight:700;
-
+    font-weight:600;
 }
-
 
 
 .match-pill{
@@ -2671,17 +2683,6 @@ width:100%;
     color:#15803d;
 
 }
-
-
-
-.pending-pill{
-
-    background:var(--accent-soft);
-
-    color:var(--accent);
-
-}
-
 
 
 .request-tags{
@@ -2715,33 +2716,28 @@ width:100%;
 
 
 .request-description{
+    margin:10px 0 20px;
 
-    font-size:.9rem;
+    color:var(--text-secondary);
 
-    line-height:1.6;
+    font-size:.88rem;
 
-    margin-bottom:22px;
+    line-height:1.5;
 
+    max-width:500px;
 }
-
 
 
 .request-actions-new{
-
-    display:flex;
-
-    gap:12px;
-
+display:flex;
+gap:12px;
+align-items:center;
 }
 
-
-
 .request-actions-new button{
-
-    flex:1;
-
-    padding:13px;
-
+    width:180px;
+    height:46px;
+    padding:0;
 }
 
 
@@ -2769,19 +2765,15 @@ width:100%;
 
 
 .withdraw-new{
-
-    margin-top:22px;
-
-    width:100%;
-
     background:transparent!important;
-
     color:#ef4444!important;
-
     border:1px solid #ef4444!important;
 
-}
+    width:180px;
+    height:46px;
 
+    margin-top:0;
+}
 
 
 @media(max-width:700px){
@@ -2798,6 +2790,17 @@ width:100%;
 
     padding:10px;
 
+}
+
+.request-user div{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+}
+
+.hostel{
+    color:var(--text-secondary);
+    font-size:.8rem;
 }
 
 }

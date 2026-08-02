@@ -467,28 +467,25 @@ return students
 
 },[students]);
   const shown = matches.filter(person => (filter === 'All' || person.hostel === filter) && person.name.toLowerCase().includes(query.toLowerCase()));
-  const accept = name => {
+  const accept = async (requestId, name) => {
 
-  setRequests(old =>
-    old.filter(item => item.name !== name)
+  const { error } = await supabase.rpc(
+    "respond_to_roommate_request",
+    {
+      p_request_id: requestId,
+      p_decision: "accepted"
+    }
   );
 
-  setConnections(old =>
-    old.some(item => item.name === name)
-      ? old
-      : [
-          ...old,
-          {
-            name,
-            status: "accepted",
-            date: "Today"
-          }
-        ]
-  );
+  if (error) {
+    console.log(error);
+    tell(error.message);
+    return;
+  }
 
-  setRequestPanel(false);
+  await fetchIncomingRequests();
 
-  tell(`${name} is now in your chats`);
+  tell(`${name} accepted`);
 };
   const sendRequest = async (person) => {
 
@@ -503,26 +500,11 @@ return students
     }
   );
 
-
-  if(error){
-    console.log("Request error:", error);
-    tell(error.message);
-    return;
-  }
+console.log("RPC returned:", data);
+console.log("RPC error:", error);
 
 
-  console.log("Request sent:", data);
-
-
-  setSentRequests(old => [
-    ...old,
-    {
-      name: person.name,
-      status: "pending",
-      date: "Today"
-    }
-  ]);
-
+await fetchSentRequests();
 
   tell(`Connection request sent to ${person.name}`);
 };
@@ -542,7 +524,11 @@ return students
 console.log("CREATE PROFILE CLICKED");
   const { data: { user } } = await supabase.auth.getUser();
 
-  console.log("PROFILE BEFORE SAVE:", profile);
+  console.log("PROFILE:", profile);
+console.log("YEAR:", profile.year);
+console.log("BRANCH:", profile.branch);
+console.log("GENDER:", profile.gender);
+console.log("HOSTEL:", profile.hostel);
 
 console.log("YEAR =", profile.year);
 console.log(
@@ -1059,9 +1045,9 @@ Reject
 </button>
 
 
-<button 
+<button
 className="approve"
-onClick={()=>accept(person.name)}
+onClick={() => accept(person.id, person.name)}
 >
 Accept
 </button>
@@ -1081,13 +1067,12 @@ Accept
 
 <div className="request-user">
 
-<div 
+<div
 className="avatar"
 style={{background:person.color}}
 >
 {person.avatar}
 </div>
-
 
 <div>
 <h2>{person.name}</h2>
@@ -1096,14 +1081,11 @@ style={{background:person.color}}
 </p>
 </div>
 
-
 </div>
-
 
 <div className="pending-pill">
 Pending
 </div>
-
 
 <div className="request-actions-new">
 
@@ -1114,7 +1096,6 @@ onClick={() => openPerson(person.candidate_id)}
 View Profile
 </button>
 
-
 <button
 className="withdraw-new"
 onClick={()=>withdrawRequest(person.name)}
@@ -1123,7 +1104,6 @@ Withdraw request
 </button>
 
 </div>
-
 
 </div>
 
@@ -1194,15 +1174,20 @@ function Select({ label, value, options, onChange }) {
       {label}
 
       <select
-        value={value ?? ""}
-        onChange={event => onChange(event.target.value)}
-      >
-        {options.map(option => (
-          <option key={option} value={option}>
+    value={value || ""}
+    onChange={(e) => {
+        console.log(label, e.target.value);
+        onChange(e.target.value);
+    }}
+>
+    <option value="">Select...</option>
+
+    {options.map(option => (
+        <option key={option} value={option}>
             {option}
-          </option>
-        ))}
-      </select>
+        </option>
+    ))}
+</select>
 
     </label>
   );
