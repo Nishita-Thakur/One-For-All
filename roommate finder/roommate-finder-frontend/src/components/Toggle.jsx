@@ -1,0 +1,1 @@
+export default function Toggle({ label, description, value, onChange }) { return <div className="toggle-row"><div><b>{label}</b><p>{description}</p></div><button className={value ? 'toggle on' : 'toggle'} onClick={() => onChange(!value)}><i /></button></div>; }
